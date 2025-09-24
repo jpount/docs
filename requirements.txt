@@ -16,5 +16,11 @@ pathlib2>=2.3.7 ; python_version < "3.4"
 # Additional utilities
 python-multipart>=0.0.6
 
+# Tree-sitter for AST analysis
+tree-sitter>=0.25.0
+tree-sitter-java>=0.23.0
+tree-sitter-c-sharp>=0.23.0
+tree-sitter-php>=0.24.0
+
 # diagram validation
 mermaid-cli

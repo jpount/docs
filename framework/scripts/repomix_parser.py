@@ -231,6 +231,15 @@ class RepomixParser:
                     if class_match:
                         current_class = class_match.group(1)
 
+                # PHP patterns
+                elif file_path.endswith(('.php', '.phtml', '.php3', '.php4', '.php5', '.php7', '.phps')):
+                    self._extract_php_components(line, file_path, i, relative_line, current_class)
+
+                    # Track current class
+                    class_match = re.match(r'\s*(class|interface|trait)\s+(\w+)', line)
+                    if class_match:
+                        current_class = class_match.group(2)
+
                 # JavaScript/TypeScript patterns
                 elif file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
                     self._extract_javascript_components(line, file_path, i, relative_line)
@@ -497,6 +506,109 @@ class RepomixParser:
                 signature=line.strip(),
                 snippet=line.strip()
             ))
+
+    def _extract_php_components(self, line: str, file_path: str, repomix_line: int,
+                                relative_line: int, current_class: Optional[str]):
+        """
+        Extract PHP specific components.
+
+        Identifies classes, interfaces, traits, functions, and methods from PHP code.
+
+        Args:
+            line: Current line of code
+            file_path: Path to the source file
+            repomix_line: Line number in repomix file
+            relative_line: Line number in the code block
+            current_class: Name of the current class context
+        """
+
+        # PHP Classes, Interfaces, and Traits
+        class_match = re.match(r'\s*(abstract\s+|final\s+)?(class|interface|trait)\s+(\w+)', line)
+        if class_match:
+            component_type = class_match.group(2)
+            name = class_match.group(3)
+
+            if component_type == 'interface':
+                target = 'interfaces'
+            elif component_type == 'trait':
+                target = 'classes'  # Traits are class-like
+            else:
+                target = 'classes'
+
+            self.components[target].append(CodeComponent(
+                name=name,
+                type=component_type,
+                file_path=file_path,
+                repomix_line=repomix_line + 1,
+                original_line=relative_line,
+                signature=line.strip(),
+                snippet=line.strip()
+            ))
+
+        # PHP Functions and Methods
+        # Regular function definitions
+        func_match = re.match(r'\s*(public\s+|private\s+|protected\s+)?(static\s+)?function\s+(\w+)\s*\([^)]*\)', line)
+        if func_match:
+            method_name = func_match.group(3)
+
+            # Skip magic methods that aren't typically business logic
+            if not method_name.startswith('__') or method_name in ['__construct', '__invoke', '__call']:
+                self.components['methods'].append(CodeComponent(
+                    name=method_name,
+                    type='method' if current_class else 'function',
+                    file_path=file_path,
+                    repomix_line=repomix_line + 1,
+                    original_line=relative_line,
+                    signature=line.strip(),
+                    parent_class=current_class,
+                    snippet=line.strip()
+                ))
+
+        # PHP Closures/Anonymous functions
+        closure_match = re.search(r'(\$\w+)\s*=\s*function\s*\([^)]*\)', line)
+        if closure_match:
+            closure_name = closure_match.group(1)
+            self.components['methods'].append(CodeComponent(
+                name=closure_name,
+                type='closure',
+                file_path=file_path,
+                repomix_line=repomix_line + 1,
+                original_line=relative_line,
+                signature=line.strip(),
+                parent_class=current_class,
+                snippet=line.strip()
+            ))
+
+        # PHP Route definitions (Laravel style)
+        route_match = re.search(r'Route::(get|post|put|delete|patch|any|match)\s*\([^)]*\)', line)
+        if route_match:
+            route_method = route_match.group(1)
+            self.components['api_endpoints'].append(CodeComponent(
+                name=f"Route_{route_method}",
+                type='api_endpoint',
+                file_path=file_path,
+                repomix_line=repomix_line + 1,
+                original_line=relative_line,
+                signature=line.strip(),
+                parent_class=current_class,
+                snippet=line.strip()
+            ))
+
+        # PHP Attributes (PHP 8+) and DocBlock annotations
+        attribute_match = re.match(r'\s*#\[(\w+)(\([^)]*\))?\]', line)
+        if attribute_match:
+            attribute = attribute_match.group(1)
+            if attribute in ['Route', 'Controller', 'Middleware', 'Validator', 'Authorize']:
+                self.components['annotations'].append(CodeComponent(
+                    name=attribute,
+                    type='php_attribute',
+                    file_path=file_path,
+                    repomix_line=repomix_line + 1,
+                    original_line=relative_line,
+                    signature=line.strip(),
+                    parent_class=current_class,
+                    snippet=line.strip()
+                ))
 
     def _extract_javascript_components(self, line: str, file_path: str, repomix_line: int,
                                       relative_line: int):

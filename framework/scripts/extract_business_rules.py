@@ -21,6 +21,26 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from collections import defaultdict
 
+# Tree-sitter imports for AST analysis
+try:
+    import tree_sitter
+    from tree_sitter_java import language as java_language
+    try:
+        from tree_sitter_c_sharp import language as csharp_language
+    except ImportError:
+        csharp_language = None
+    try:
+        from tree_sitter_php import language as php_language
+    except ImportError:
+        php_language = None
+    TREE_SITTER_AVAILABLE = True
+except ImportError:
+    TREE_SITTER_AVAILABLE = False
+    java_language = None
+    csharp_language = None
+    php_language = None
+    print("⚠️ Warning: tree-sitter not available. Install with 'pip install tree-sitter tree-sitter-java'")
+
 # Add framework scripts to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -69,9 +89,697 @@ class MethodBusinessLogic:
     full_method_body: str
     control_flow_complexity: int
     business_domain_score: int
+    rules: List[str] = None  # New field for tree-sitter extracted rules
     cyclomatic_complexity: int = 0
     method_length: int = 0
     has_business_annotations: bool = False
+
+
+class TreeSitterBusinessRuleAnalyzer:
+    """Uses tree-sitter AST analysis to extract business rules from method source code"""
+
+    def __init__(self):
+        self.parsers = {}
+        self.languages = {}
+
+        if TREE_SITTER_AVAILABLE:
+            # Initialize Java parser
+            if java_language is not None:
+                try:
+                    java_parser = tree_sitter.Parser(java_language())
+                    self.parsers['java'] = java_parser
+                    self.languages['java'] = java_language()
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to initialize Java parser: {e}")
+
+            # Initialize C# parser if available
+            if csharp_language is not None:
+                try:
+                    csharp_parser = tree_sitter.Parser(csharp_language())
+                    self.parsers['csharp'] = csharp_parser
+                    self.languages['csharp'] = csharp_language()
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to initialize C# parser: {e}")
+
+            # Initialize PHP parser if available
+            if php_language is not None:
+                try:
+                    php_parser = tree_sitter.Parser(php_language())
+                    self.parsers['php'] = php_parser
+                    self.languages['php'] = php_language()
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to initialize PHP parser: {e}")
+
+    def get_language_from_file_path(self, file_path: str) -> Optional[str]:
+        """Determine language from file extension"""
+        ext = Path(file_path).suffix.lower()
+        if ext in ['.java', '.jsp', '.jsf']:
+            return 'java'
+        elif ext in ['.cs', '.cshtml']:
+            return 'csharp'
+        elif ext in ['.php', '.phtml', '.php3', '.php4', '.php5', '.php7', '.phps']:
+            return 'php'
+        return None
+
+    def extract_business_rules_from_method(self, method_source: str, file_path: str) -> List[str]:
+        """Extract business rules from method source using tree-sitter AST analysis"""
+        if not TREE_SITTER_AVAILABLE:
+            return self._fallback_rule_extraction(method_source, file_path)
+
+        language = self.get_language_from_file_path(file_path)
+        if language not in self.parsers:
+            return self._fallback_rule_extraction(method_source, file_path)
+
+        try:
+            parser = self.parsers[language]
+            tree = parser.parse(bytes(method_source, 'utf8'))
+            root_node = tree.root_node
+
+            rules = []
+
+            if language == 'java':
+                rules = self._extract_java_business_rules(root_node, method_source)
+            elif language == 'csharp':
+                rules = self._extract_csharp_business_rules(root_node, method_source)
+            elif language == 'php':
+                rules = self._extract_php_business_rules(root_node, method_source)
+
+            return rules
+
+        except Exception as e:
+            print(f"⚠️ Warning: Tree-sitter parsing failed for {file_path}: {e}")
+            return self._fallback_rule_extraction(method_source, file_path)
+
+    def _fallback_rule_extraction(self, method_source: str, file_path: str) -> List[str]:
+        """Generic contextual rule extraction for any business domain"""
+        rules = []
+
+        # Generic business indicators (not domain-specific)
+        business_indicators = [
+            'calculate', 'validate', 'process', 'create', 'update', 'delete',
+            'check', 'verify', 'ensure', 'handle', 'manage', 'execute',
+            'if (', 'switch', 'for (', 'while (', 'try {',
+            '== null', '!= null', '.equals(', '.compareTo(',
+            'BigDecimal', 'Money', 'Currency', 'Amount', 'Decimal'
+        ]
+
+        if not any(indicator in method_source for indicator in business_indicators):
+            return []
+
+        lines = method_source.split('\n')
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped or line_stripped.startswith('//'):
+                continue
+
+            # Generic conditional logic extraction with context
+            if 'if (' in line_stripped:
+                condition_match = re.search(r'if\s*\(([^)]+)\)', line_stripped)
+                if condition_match:
+                    condition = condition_match.group(1).strip()
+                    context = self._get_meaningful_context(lines, i, 1, 2)
+
+                    if '== null' in condition or '!= null' in condition:
+                        entity = condition.split()[0] if condition.split() else 'object'
+                        rules.append(f"Validation rule: Check {entity} existence -> {condition}\nContext:\n{context}")
+                    elif any(comparator in condition for comparator in ['==', '!=', '>', '<', '>=', '<=']):
+                        rules.append(f"Business condition: Evaluate {condition} to control flow\nContext:\n{context}")
+                    else:
+                        rules.append(f"Conditional logic: {condition}\nContext:\n{context}")
+
+            # Generic try-catch blocks
+            elif 'try {' in line_stripped:
+                rules.append("Error handling: Begin transaction/operation with exception management")
+
+            # Generic mathematical/financial calculations
+            elif ('=' in line_stripped and
+                  (any(math_indicator in line_stripped for math_indicator in ['.multiply(', '.add(', '.subtract(', '.divide(', '*', '+', '-', '/', 'Math.']) or
+                   'BigDecimal' in line_stripped or 'Decimal' in line_stripped)):
+
+                # Get variable being assigned
+                var_name = line_stripped.split('=')[0].strip()
+                calculation = line_stripped.split('=')[1].strip().rstrip(';')
+
+                # Show actual calculation with real variable names
+                if 'BigDecimal' in calculation:
+                    # Parse complex BigDecimal operations to show meaningful patterns
+                    if '.multiply(' in calculation and '.subtract(' in calculation:
+                        # Handle nested BigDecimal operations like: (new BigDecimal(quantity).multiply(price)).subtract(orderFee)
+                        # Extract variable names from the calculation
+                        multiply_match = re.search(r'BigDecimal\((\w+)\)\.multiply\((\w+)\)', calculation)
+                        subtract_match = re.search(r'\.subtract\((\w+)\)', calculation)
+
+                        if multiply_match and subtract_match:
+                            var1 = multiply_match.group(1)
+                            var2 = multiply_match.group(2)
+                            var3 = subtract_match.group(1)
+                            context = self._get_meaningful_context(lines, i, 2, 1)
+                            rules.append(f"Calculation rule: {var_name} = ({var1} * {var2}) - {var3} [BigDecimal precision]\nContext:\n{context}")
+                        else:
+                            # Fallback to simplified view
+                            simplified = re.sub(r'new BigDecimal\((\w+)\)', r'\1', calculation)
+                            simplified = simplified.replace('.multiply(', ' * ').replace('.subtract(', ' - ').replace(')', '')
+                            context = self._get_meaningful_context(lines, i, 1, 1)
+                            rules.append(f"Calculation rule: {var_name} = {simplified} [BigDecimal precision]\nContext:\n{context}")
+
+                    elif '.multiply(' in calculation:
+                        multiply_match = re.search(r'BigDecimal\((\w+)\)\.multiply\((\w+)\)', calculation)
+                        if multiply_match:
+                            var1 = multiply_match.group(1)
+                            var2 = multiply_match.group(2)
+                            rules.append(f"Calculation rule: {var_name} = {var1} * {var2} [BigDecimal precision]")
+                        else:
+                            simplified = re.sub(r'new BigDecimal\((\w+)\)', r'\1', calculation)
+                            simplified = simplified.replace('.multiply(', ' * ').replace(')', '')
+                            rules.append(f"Calculation rule: {var_name} = {simplified}")
+
+                    elif '.add(' in calculation:
+                        add_match = re.search(r'(\w+)\.add\((\w+)\)', calculation)
+                        if add_match:
+                            var1 = add_match.group(1)
+                            var2 = add_match.group(2)
+                            rules.append(f"Calculation rule: {var_name} = {var1} + {var2} [BigDecimal precision]")
+                        else:
+                            simplified = calculation.replace('.add(', ' + ').replace(')', '')
+                            rules.append(f"Calculation rule: {var_name} = {simplified}")
+
+                    elif '.subtract(' in calculation:
+                        subtract_match = re.search(r'(\w+)\.subtract\((\w+)\)', calculation)
+                        if subtract_match:
+                            var1 = subtract_match.group(1)
+                            var2 = subtract_match.group(2)
+                            rules.append(f"Calculation rule: {var_name} = {var1} - {var2} [BigDecimal precision]")
+                        else:
+                            simplified = calculation.replace('.subtract(', ' - ').replace(')', '')
+                            rules.append(f"Calculation rule: {var_name} = {simplified}")
+                    else:
+                        rules.append(f"Calculation rule: {var_name} = {calculation[:60]}... [BigDecimal precision]")
+
+                elif any(op in calculation for op in ['*', '/', '+', '-']):
+                    rules.append(f"Calculation rule: {var_name} = {calculation}")
+                else:
+                    rules.append(f"Assignment rule: {var_name} = {calculation[:50]}...")
+
+            # Generic data assignment patterns
+            elif ('=' in line_stripped and
+                  any(data_pattern in line_stripped for data_pattern in ['.get(', 'new ', '.find(', '.create('])):
+
+                var_name = line_stripped.split('=')[0].strip()
+                assignment = line_stripped.split('=')[1].strip().rstrip(';')
+
+                if '.get(' in assignment:
+                    rules.append(f"Data access: Retrieve {var_name} from existing object")
+                elif '.find(' in assignment:
+                    rules.append(f"Data retrieval: Query {var_name} from data source")
+                elif 'new ' in assignment:
+                    rules.append(f"Object creation: Initialize new {var_name}")
+                elif '.create(' in assignment:
+                    rules.append(f"Factory method: Create {var_name} using business logic")
+                else:
+                    rules.append(f"Data assignment: Set {var_name} = {assignment[:30]}...")
+
+            # Generic state update patterns with context
+            elif ('set' in line_stripped.lower() and '(' in line_stripped):
+                method_match = re.search(r'\.(\w*set\w*)\s*\(([^)]*)\)', line_stripped, re.IGNORECASE)
+                if method_match:
+                    method_name = method_match.group(1)
+                    parameter = method_match.group(2).strip().strip('"\'')
+                    context = self._get_meaningful_context(lines, i, 1, 1)
+
+                    # Generic state update descriptions with context
+                    property_name = method_name.replace('set', '').replace('Set', '')
+                    if '.add(' in parameter:
+                        rules.append(f"State update: Increment {property_name} by adding {parameter}\nContext:\n{context}")
+                    elif '.subtract(' in parameter:
+                        rules.append(f"State update: Decrement {property_name} by subtracting {parameter}\nContext:\n{context}")
+                    elif parameter.startswith('"') and parameter.endswith('"'):
+                        rules.append(f"State update: Set {property_name} to '{parameter.strip('\"')}'\nContext:\n{context}")
+                    else:
+                        rules.append(f"State update: Set {property_name} = {parameter}\nContext:\n{context}")
+
+            # Generic database/persistence operations
+            elif any(op in line_stripped.lower() for op in ['persist', 'remove', 'find', 'merge', 'save', 'delete']):
+                persistence_match = re.search(r'(\w+)\.(persist|remove|find|merge|save|delete)', line_stripped, re.IGNORECASE)
+                if persistence_match:
+                    operation = persistence_match.group(2).lower()
+                    if operation in ['persist', 'save']:
+                        rules.append("Persistence rule: Save object to data store")
+                    elif operation in ['remove', 'delete']:
+                        rules.append("Persistence rule: Delete object from data store")
+                    elif operation == 'find':
+                        rules.append("Data access rule: Query object from data store")
+                    elif operation == 'merge':
+                        rules.append("Persistence rule: Update existing object in data store")
+
+            # Generic method invocation patterns with context
+            elif (re.search(r'\w+\s*\([^)]*\)', line_stripped) and
+                  any(action_word in line_stripped.lower() for action_word in
+                      ['complete', 'queue', 'process', 'execute', 'handle', 'manage', 'validate', 'verify'])):
+
+                method_match = re.search(r'(\w+)\s*\(([^)]*)\)', line_stripped)
+                if method_match:
+                    method_name = method_match.group(1)
+                    args = method_match.group(2)
+                    context = self._get_meaningful_context(lines, i, 1, 1)
+
+                    if any(keyword in method_name.lower() for keyword in ['complete', 'finish', 'finalize']):
+                        rules.append(f"Workflow rule: {method_name}({args}) - Complete operation\nContext:\n{context}")
+                    elif any(keyword in method_name.lower() for keyword in ['queue', 'enqueue', 'schedule']):
+                        rules.append(f"Workflow rule: {method_name}({args}) - Queue for async processing\nContext:\n{context}")
+                    elif any(keyword in method_name.lower() for keyword in ['validate', 'verify', 'check']):
+                        rules.append(f"Validation rule: {method_name}({args}) - Verify constraints\nContext:\n{context}")
+                    elif any(keyword in method_name.lower() for keyword in ['process', 'execute', 'handle']):
+                        rules.append(f"Processing rule: {method_name}({args}) - Execute operation\nContext:\n{context}")
+                    else:
+                        rules.append(f"Business method: {method_name}({args})\nContext:\n{context}")
+
+            # Generic conditional flow control
+            elif ('if (' in line_stripped and
+                  any(flow_pattern in line_stripped for flow_pattern in ['Mode', 'Config', 'Type', 'Status', '==', '!='])):
+
+                condition_match = re.search(r'if\s*\(([^)]+)\)', line_stripped)
+                if condition_match:
+                    condition = condition_match.group(1).strip()
+                    next_line = self._get_next_meaningful_lines(lines, i, 1)
+
+                    if any(sync_pattern in condition for sync_pattern in ['SYNCH', 'SYNC', 'Synchronous']):
+                        rules.append(f"Flow control: If synchronous mode -> execute immediately ({next_line[:30]}...)")
+                    elif any(async_pattern in condition for async_pattern in ['ASYNCH', 'ASYNC', 'Asynchronous']):
+                        rules.append(f"Flow control: If asynchronous mode -> defer execution ({next_line[:30]}...)")
+                    elif 'Mode' in condition or 'Config' in condition:
+                        rules.append(f"Configuration rule: Based on {condition} -> determine execution path")
+                    else:
+                        rules.append(f"Conditional rule: If {condition} -> execute specific logic")
+
+        # Prioritize rules by importance before grouping
+        if len(rules) > 1:
+            priority_rules = []
+            regular_rules = []
+
+            # Separate high-priority rules (calculations, validations, workflow, conditions)
+            for rule in rules:
+                if any(priority_keyword in rule.lower() for priority_keyword in
+                      ['calculation rule', 'validation rule', 'workflow rule', 'conditional rule', 'flow control', 'error handling']):
+                    priority_rules.append(rule)
+                else:
+                    regular_rules.append(rule)
+
+            # Combine with priority rules first
+            all_rules = priority_rules + regular_rules
+
+            # Group with separators
+            grouped_rules = []
+            for i in range(len(all_rules)):
+                grouped_rules.append(all_rules[i])
+                # Add separator after every 3 related rules
+                if (i + 1) % 3 == 0 and i + 1 < len(all_rules):
+                    grouped_rules.append("...")
+
+            return grouped_rules[:10]  # Increased limit to capture more important rules
+
+        return rules
+
+    def _get_meaningful_context(self, lines: List[str], center_idx: int, before: int = 2, after: int = 2) -> str:
+        """Get meaningful context around a line showing actual code structure"""
+        context_lines = []
+        start = max(0, center_idx - before)
+        end = min(len(lines), center_idx + after + 1)
+
+        for i in range(start, end):
+            line = lines[i].strip()
+            if not line or line.startswith('//'):
+                continue
+
+            # Indicate which line is the current focus
+            if i == center_idx:
+                context_lines.append(f">>> {line}")
+            else:
+                context_lines.append(f"    {line}")
+
+        return '\n'.join(context_lines) if context_lines else ""
+
+    def _get_next_meaningful_lines(self, lines: List[str], start_idx: int, count: int) -> str:
+        """Get next meaningful lines after start_idx for context"""
+        meaningful_lines = []
+        for i in range(start_idx + 1, min(start_idx + count + 5, len(lines))):
+            line = lines[i].strip()
+            if line and not line.startswith('//') and line not in ['{', '}', '};']:
+                meaningful_lines.append(line)
+                if len(meaningful_lines) >= count:
+                    break
+        return '\n    '.join(meaningful_lines) if meaningful_lines else ""
+
+    def _get_surrounding_context(self, lines: List[str], center_idx: int, radius: int) -> str:
+        """Get context around a line for better understanding"""
+        context_lines = []
+        start = max(0, center_idx - radius)
+        end = min(len(lines), center_idx + radius + 1)
+
+        for i in range(start, end):
+            if i == center_idx:
+                continue  # Skip the center line itself
+            line = lines[i].strip()
+            if line and not line.startswith('//') and len(line) > 5:
+                context_lines.append(line)
+
+        return '\n    '.join(context_lines[:3]) if context_lines else "processing data"
+
+    def _extract_java_business_rules(self, root_node, source_code: str) -> List[str]:
+        """Extract business rules from Java AST"""
+        rules = []
+        source_lines = source_code.split('\n')
+
+        def traverse_node(node, depth=0):
+            # Extract business logic from different node types
+            node_type = node.type
+
+            # Java conditional logic rules with context
+            if node_type == 'if_statement':
+                condition = self._get_node_text(node.child_by_field_name('condition'), source_code)
+                if condition and self._is_business_condition(condition):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 2)
+                    rules.append(f"Validation rule: {condition.strip()}\nContext:\n{context}")
+
+            # Java switch/case business rules with context
+            elif node_type in ['switch_expression', 'switch_statement']:
+                switch_expr = self._get_node_text(node.child_by_field_name('condition'), source_code)
+                if switch_expr and self._is_business_related(switch_expr):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Business logic: Switch on {switch_expr.strip()}\nContext:\n{context}")
+
+            # Java method invocation business rules with context
+            elif node_type == 'method_invocation':
+                method_name = self._get_method_name(node, source_code)
+                if method_name and self._is_business_method(method_name):
+                    args = self._get_method_arguments(node, source_code)
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rule_text = f"Business operation: {method_name}{args}\nContext:\n{context}" if args else f"Business operation: {method_name}()\nContext:\n{context}"
+                    rules.append(rule_text)
+
+            # Java assignment with business calculations and context
+            elif node_type == 'assignment_expression':
+                left = self._get_node_text(node.child_by_field_name('left'), source_code)
+                right = self._get_node_text(node.child_by_field_name('right'), source_code)
+                if left and right and (self._is_business_calculation(right) or self._is_business_variable(left)):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Calculation rule: {left.strip()} = {right.strip()}\nContext:\n{context}")
+
+            # Java variable declarations with business significance and context
+            elif node_type == 'variable_declarator':
+                var_name = self._get_variable_name(node, source_code)
+                initializer = node.child_by_field_name('value')
+                if var_name and initializer and self._is_business_variable(var_name):
+                    init_text = self._get_node_text(initializer, source_code)
+                    if init_text:
+                        line_num = source_code[:node.start_byte].count('\n')
+                        context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                        rules.append(f"Data initialization: {var_name} = {init_text.strip()}\nContext:\n{context}")
+
+            # Recursively traverse child nodes
+            for child in node.children:
+                traverse_node(child, depth + 1)
+
+        traverse_node(root_node)
+
+        # Split multiple logical sections with "..."
+        if len(rules) > 3:
+            # Group rules by logical sections (every 2-3 rules)
+            grouped_rules = []
+            for i in range(0, len(rules), 3):
+                section = rules[i:i+3]
+                grouped_rules.extend(section)
+                if i + 3 < len(rules):  # Not the last section
+                    grouped_rules.append("...")
+            return grouped_rules
+
+        return rules
+
+    def _extract_csharp_business_rules(self, root_node, source_code: str) -> List[str]:
+        """Extract business rules from C# AST"""
+        rules = []
+        source_lines = source_code.split('\n')
+
+        def traverse_node(node, depth=0):
+            node_type = node.type
+
+            # C# conditional statements
+            if node_type == 'if_statement':
+                condition = self._get_node_text(node.child_by_field_name('condition'), source_code)
+                if condition and self._is_business_condition(condition):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 2)
+                    rules.append(f"Validation rule: {condition.strip()}\nContext:\n{context}")
+
+            # C# switch expressions/statements
+            elif node_type in ['switch_statement', 'switch_expression']:
+                switch_expr = self._get_node_text(node.child_by_field_name('value'), source_code)
+                if switch_expr and self._is_business_related(switch_expr):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Business logic: Switch on {switch_expr.strip()}\nContext:\n{context}")
+
+            # C# method invocations
+            elif node_type == 'invocation_expression':
+                method_node = node.child_by_field_name('function')
+                if method_node:
+                    method_name = self._get_node_text(method_node, source_code)
+                    if method_name and self._is_business_method(method_name):
+                        args_node = node.child_by_field_name('arguments')
+                        args = self._get_node_text(args_node, source_code) if args_node else "()"
+                        line_num = source_code[:node.start_byte].count('\n')
+                        context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                        rules.append(f"Business operation: {method_name}{args}\nContext:\n{context}")
+
+            # C# assignment expressions
+            elif node_type == 'assignment_expression':
+                left = self._get_node_text(node.child_by_field_name('left'), source_code)
+                right = self._get_node_text(node.child_by_field_name('right'), source_code)
+                if left and right and (self._is_business_calculation(right) or self._is_business_variable(left)):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Calculation rule: {left.strip()} = {right.strip()}\nContext:\n{context}")
+
+            # C# variable declarations
+            elif node_type == 'variable_declarator':
+                name_node = node.child_by_field_name('name')
+                value_node = node.child_by_field_name('value')
+                if name_node and value_node:
+                    var_name = self._get_node_text(name_node, source_code)
+                    init_value = self._get_node_text(value_node, source_code)
+                    if var_name and init_value and self._is_business_variable(var_name):
+                        line_num = source_code[:node.start_byte].count('\n')
+                        context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                        rules.append(f"Data initialization: {var_name} = {init_value.strip()}\nContext:\n{context}")
+
+            # Recursively traverse child nodes
+            for child in node.children:
+                traverse_node(child, depth + 1)
+
+        traverse_node(root_node)
+
+        # Group rules by logical sections with separators
+        if len(rules) > 3:
+            grouped_rules = []
+            for i in range(0, len(rules), 3):
+                section = rules[i:i+3]
+                grouped_rules.extend(section)
+                if i + 3 < len(rules):
+                    grouped_rules.append("...")
+            return grouped_rules[:10]
+
+        return rules
+
+    def _extract_php_business_rules(self, root_node, source_code: str) -> List[str]:
+        """Extract business rules from PHP AST"""
+        rules = []
+        source_lines = source_code.split('\n')
+
+        def traverse_node(node, depth=0):
+            node_type = node.type
+
+            # PHP conditional statements
+            if node_type == 'if_statement':
+                condition = self._get_node_text(node.child_by_field_name('condition'), source_code)
+                if condition and self._is_business_condition(condition):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 2)
+                    rules.append(f"Validation rule: {condition.strip()}\nContext:\n{context}")
+
+            # PHP switch statements
+            elif node_type == 'switch_statement':
+                switch_expr = self._get_node_text(node.child_by_field_name('value'), source_code)
+                if switch_expr and self._is_business_related(switch_expr):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Business logic: Switch on {switch_expr.strip()}\nContext:\n{context}")
+
+            # PHP function calls
+            elif node_type == 'function_call_expression':
+                function_node = node.child_by_field_name('function')
+                if function_node:
+                    function_name = self._get_node_text(function_node, source_code)
+                    if function_name and self._is_business_method(function_name):
+                        args_node = node.child_by_field_name('arguments')
+                        args = self._get_node_text(args_node, source_code) if args_node else "()"
+                        line_num = source_code[:node.start_byte].count('\n')
+                        context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                        rules.append(f"Business operation: {function_name}{args}\nContext:\n{context}")
+
+            # PHP assignment expressions
+            elif node_type == 'assignment_expression':
+                left = self._get_node_text(node.child_by_field_name('left'), source_code)
+                right = self._get_node_text(node.child_by_field_name('right'), source_code)
+                if left and right and (self._is_business_calculation(right) or self._is_business_variable(left)):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Calculation rule: {left.strip()} = {right.strip()}\nContext:\n{context}")
+
+            # PHP variable declarations (with assignment)
+            elif node_type == 'simple_assignment':
+                left = self._get_node_text(node.child_by_field_name('left'), source_code)
+                right = self._get_node_text(node.child_by_field_name('right'), source_code)
+                if left and right and (self._is_business_variable(left) or self._is_business_calculation(right)):
+                    line_num = source_code[:node.start_byte].count('\n')
+                    context = self._get_context_from_source(source_lines, line_num, 1, 1)
+                    rules.append(f"Data assignment: {left.strip()} = {right.strip()}\nContext:\n{context}")
+
+            # Recursively traverse child nodes
+            for child in node.children:
+                traverse_node(child, depth + 1)
+
+        traverse_node(root_node)
+
+        # Group rules by logical sections with separators
+        if len(rules) > 3:
+            grouped_rules = []
+            for i in range(0, len(rules), 3):
+                section = rules[i:i+3]
+                grouped_rules.extend(section)
+                if i + 3 < len(rules):
+                    grouped_rules.append("...")
+            return grouped_rules[:10]
+
+        return rules
+
+    def _get_context_from_source(self, source_lines: List[str], center_line: int, before: int, after: int) -> str:
+        """Get context around a specific line number in source code"""
+        context_lines = []
+        start = max(0, center_line - before)
+        end = min(len(source_lines), center_line + after + 1)
+
+        for i in range(start, end):
+            line = source_lines[i].strip()
+            if not line or line.startswith('//'):
+                continue
+
+            if i == center_line:
+                context_lines.append(f">>> {line}")
+            else:
+                context_lines.append(f"    {line}")
+
+        return '\n'.join(context_lines) if context_lines else ""
+
+    def _get_node_text(self, node, source_code: str) -> Optional[str]:
+        """Get text content of a node"""
+        if node is None:
+            return None
+        try:
+            return source_code[node.start_byte:node.end_byte]
+        except:
+            return None
+
+    def _get_method_name(self, method_node, source_code: str) -> Optional[str]:
+        """Extract method name from method invocation node"""
+        name_node = method_node.child_by_field_name('name')
+        if name_node:
+            return self._get_node_text(name_node, source_code)
+        return None
+
+    def _get_method_arguments(self, method_node, source_code: str) -> str:
+        """Extract method arguments as string"""
+        args_node = method_node.child_by_field_name('arguments')
+        if args_node:
+            return self._get_node_text(args_node, source_code)
+        return ""
+
+    def _get_variable_name(self, var_node, source_code: str) -> Optional[str]:
+        """Extract variable name from variable declarator"""
+        name_node = var_node.child_by_field_name('name')
+        if name_node:
+            return self._get_node_text(name_node, source_code)
+        return None
+
+    def _is_business_condition(self, condition: str) -> bool:
+        """Check if a condition represents business logic (generic patterns)"""
+        business_patterns = [
+            r'\b(?:amount|value|total|count|size|length|limit|threshold)\b',
+            r'\b(?:status|state|type|mode|flag|enabled|disabled)\s*[=!<>]',
+            r'\b(?:valid|invalid|allowed|denied|approved|rejected|active|inactive)\b',
+            r'\b(?:minimum|maximum|min|max|limit|threshold|boundary)\b',
+            r'\b(?:is\w+|can\w+|has\w+|should\w+)\b',
+            r'== null|!= null|\bequals\(',
+            r'>\s*0|<\s*0|>=\s*\d+|<=\s*\d+'
+        ]
+        return any(re.search(pattern, condition, re.IGNORECASE) for pattern in business_patterns)
+
+    def _is_business_related(self, text: str) -> bool:
+        """Check if text is business-related (generic patterns)"""
+        business_keywords = [
+            'status', 'state', 'mode', 'type', 'config', 'setting',
+            'data', 'entity', 'model', 'object', 'item', 'record',
+            'user', 'client', 'customer', 'request', 'response'
+        ]
+        return any(keyword in text.lower() for keyword in business_keywords)
+
+    def _is_business_method(self, method_name: str) -> bool:
+        """Check if method name indicates business logic (generic patterns)"""
+        business_method_patterns = [
+            r'(?:calculate|compute|process|validate|verify|check|ensure|confirm)',
+            r'(?:create|build|generate|make|construct|initialize)',
+            r'(?:update|modify|change|set|assign|configure)',
+            r'(?:delete|remove|clear|reset|cleanup)',
+            r'(?:save|persist|store|insert|upsert)',
+            r'(?:load|fetch|retrieve|get|find|search|query)',
+            r'(?:send|publish|emit|notify|trigger|fire)',
+            r'(?:handle|manage|execute|perform|run|start|stop)',
+            r'(?:login|logout|register|authenticate|authorize)',
+            r'(?:approve|reject|cancel|complete|finish|close)',
+            r'(?:transform|convert|parse|format|serialize)'
+        ]
+        return any(re.search(pattern, method_name, re.IGNORECASE) for pattern in business_method_patterns)
+
+    def _is_business_calculation(self, expression: str) -> bool:
+        """Check if expression represents business calculation (generic patterns)"""
+        calculation_patterns = [
+            r'(?:total|amount|sum|count|value|result|output)\s*[+\-*/%]',
+            r'(?:BigDecimal|Decimal|Money|Currency)\s*\.\s*(?:add|subtract|multiply|divide)',
+            r'Math\s*\.\s*(?:round|ceil|floor|abs|pow|sqrt|max|min)',
+            r'(?:calculate|compute|sum|aggregate)\w*\s*\(',
+            r'\d+\s*[*/%]\s*\d+',
+            r'[+\-*/]\s*(?:rate|factor|multiplier|coefficient)',
+            r'(?:precision|scale|rounding)',
+            r'[+\-*/=]\s*(?:fee|cost|charge|penalty|bonus|discount)'
+        ]
+        return any(re.search(pattern, expression, re.IGNORECASE) for pattern in calculation_patterns)
+
+    def _is_business_variable(self, var_name: str) -> bool:
+        """Check if variable name indicates business data (generic patterns)"""
+        business_var_patterns = [
+            r'(?:total|amount|sum|count|value|result|output|input)',
+            r'(?:data|entity|model|object|item|record|instance)',
+            r'(?:user|client|customer|person|account|profile)',
+            r'(?:status|state|type|mode|flag|config|setting)',
+            r'(?:id|key|index|identifier|reference|handle)',
+            r'(?:list|collection|array|set|map|dictionary)',
+            r'(?:response|request|message|event|notification)',
+            r'(?:error|exception|result|outcome|success|failure)'
+        ]
+        return any(re.search(pattern, var_name, re.IGNORECASE) for pattern in business_var_patterns)
 
 
 class BaseBusinessLogicAnalyzer(ABC):
@@ -1040,6 +1748,7 @@ class BusinessLogicExtractorV4:
         self.parser = None
         self.repomix_content = []
         self.analyzer = None  # Will be set based on file type
+        self.tree_sitter_analyzer = TreeSitterBusinessRuleAnalyzer()  # Add tree-sitter analyzer
         self.analyzers = {
             '.java': JavaBusinessLogicAnalyzerV4(),
             '.jsp': JavaBusinessLogicAnalyzerV4(),
@@ -1345,6 +2054,9 @@ class BusinessLogicExtractorV4:
         # Extract business logic types
         business_logic_types = list(set(snippet.type for snippet in all_snippets))
 
+        # NEW: Extract business rules using tree-sitter AST analysis
+        extracted_rules = self.tree_sitter_analyzer.extract_business_rules_from_method(method_body, file_path)
+
         return MethodBusinessLogic(
             method_signature=f"{method_name}({signature.split('(', 1)[1] if '(' in signature else ''}",
             file_path=file_path,
@@ -1357,6 +2069,7 @@ class BusinessLogicExtractorV4:
             full_method_body=method_body,
             control_flow_complexity=control_flow_score,
             business_domain_score=domain_score,
+            rules=extracted_rules,  # NEW: Add the tree-sitter extracted rules
             cyclomatic_complexity=cyclomatic,
             method_length=method_length,
             has_business_annotations=has_annotations
@@ -1601,6 +2314,7 @@ class BusinessLogicExtractorV4:
             'lines': f"{method.start_line}-{method.end_line}",
             'complexity_score': method.complexity_score,
             'business_logic_types': method.business_logic_types,
+            'rules': method.rules or [],  # NEW: Include tree-sitter extracted rules
             'full_method_source': method.full_method_body
         }
 

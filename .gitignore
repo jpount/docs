@@ -22,6 +22,8 @@ DOCUMENTATION_MODE.md
 codebase/*
 !codebase/.gitkeep
 
+docker-compose.yml
+
 # Logs
 logs/
 *.log

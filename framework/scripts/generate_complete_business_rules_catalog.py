@@ -12,13 +12,17 @@ from datetime import datetime
 from typing import Dict, List, Any
 import traceback
 
+# Add framework scripts to path for CitationManager
+sys.path.insert(0, str(Path(__file__).parent))
+from citation_manager import CitationManager
+
 def load_extracted_rules(json_path: str) -> Dict[str, Any]:
     """Load the extracted business rules JSON"""
     with open(json_path, 'r') as f:
         return json.load(f)
 
-def generate_rule_markdown(rule: Dict[str, Any], index: int) -> str:
-    """Generate markdown for a single rule with full details"""
+def generate_rule_markdown(rule: Dict[str, Any], index: int, citation_manager=None) -> str:
+    """Generate markdown for a single rule with full details including REF citations"""
     rule_id = rule.get('business_rule_id', f'BR-{index:05d}')
     description = rule.get('business_rule_description', 'No description')
     rule_type = rule.get('rule_type', 'unknown')
@@ -27,10 +31,19 @@ def generate_rule_markdown(rule: Dict[str, Any], index: int) -> str:
     complexity = rule.get('complexity_score', 0)
     logic_types = rule.get('business_logic_types', [])
 
+    # Get REF citation if CitationManager is available
+    ref_citation = ""
+    if citation_manager and rule_type == 'method':
+        class_name = rule.get('class_name', '')
+        if class_name:
+            ref_id = citation_manager.lookup_citation(class_name)
+            if ref_id:
+                ref_citation = f" [{ref_id}]"
+
     # Build markdown section
     section = f"### {rule_id}: {description}\n\n"
     section += f"**Type**: {rule_type}  \n"
-    section += f"**Location**: `{file_path}:{lines}`  \n"
+    section += f"**Location**: `{file_path}:{lines}`{ref_citation}  \n"
 
     # Add method-specific details
     if rule_type == 'method':
@@ -57,8 +70,25 @@ def generate_rule_markdown(rule: Dict[str, Any], index: int) -> str:
     if logic_types:
         section += f"**Business Logic Categories**: {', '.join(logic_types)}  \n"
 
+    # Add extracted business rules summary (new tree-sitter/contextual analysis)
+    rules_summary = rule.get('rules', [])
+    if rules_summary:
+        section += "\n#### Business Rules Summary\n\n"
+        section += "*Extracted contextual business logic patterns:*\n\n"
+        section += "```\n"
+        for i, rule_item in enumerate(rules_summary[:8], 1):  # Limit to first 8 rules
+            # Clean up the rule text and handle multi-line context
+            rule_text = rule_item.replace('\nContext:\n', ' | Context: ')
+            rule_text = rule_text.replace('\n>>>', ' >>> ')
+            rule_text = rule_text.replace('\n    ', ' ')
+            section += f"{i}. {rule_text}\n"
+
+        if len(rules_summary) > 8:
+            section += f"... and {len(rules_summary) - 8} more business logic patterns\n"
+        section += "```\n\n"
+
     # Add code implementation
-    section += "\n#### Implementation\n\n```java\n"
+    section += "#### Implementation\n\n```java\n"
 
     # Get the actual code
     if rule_type == 'method':
@@ -87,7 +117,7 @@ def generate_rule_markdown(rule: Dict[str, Any], index: int) -> str:
     return section
 
 def write_rules_incrementally(rules: List[Dict[str, Any]], output_path: str,
-                            rule_type: str, batch_size: int = 5):
+                            rule_type: str, batch_size: int = 5, citation_manager=None):
     """Write rules incrementally in batches to avoid memory issues"""
 
     total_rules = len(rules)
@@ -113,7 +143,7 @@ def write_rules_incrementally(rules: List[Dict[str, Any]], output_path: str,
         batch_content = ""
         for i, rule in enumerate(batch, start=batch_start+1):
             try:
-                batch_content += generate_rule_markdown(rule, i)
+                batch_content += generate_rule_markdown(rule, i, citation_manager)
                 rules_written += 1
             except Exception as e:
                 print(f"  ⚠️ Warning: Error processing rule {i}: {e}")
@@ -206,6 +236,15 @@ def main():
         print(f"   - Method rules: {len(method_rules)}")
         print(f"   - Static rules: {len(static_rules)}")
 
+        # Initialize CitationManager for REF citations
+        citation_manager = CitationManager()
+        citation_manager_loaded = citation_manager.load_citations()
+        if citation_manager_loaded:
+            print(f"✅ CitationManager loaded - REF citations will be included")
+        else:
+            print(f"⚠️ Warning: CitationManager failed to load - no REF citations")
+            citation_manager = None
+
         # Generate complete deterministic catalog
         deterministic_output = output_dir / 'business-rules-deterministic-complete.md'
 
@@ -250,7 +289,7 @@ def main():
                         # Keep original rule ID
                         rule_id = rule.get('business_rule_id', '')
                         idx = int(rule_id.split('-')[-1]) if rule_id else batch_start + 1
-                        batch_content += generate_rule_markdown(rule, idx)
+                        batch_content += generate_rule_markdown(rule, idx, citation_manager)
                         method_written += 1
                     except Exception as e:
                         print(f"  ⚠️ Warning: Error processing rule: {e}")
@@ -282,7 +321,7 @@ def main():
                         # Keep original rule ID
                         rule_id = rule.get('business_rule_id', '')
                         idx = int(rule_id.split('-')[-1]) if rule_id else len(method_rules) + batch_start + 1
-                        batch_content += generate_rule_markdown(rule, idx)
+                        batch_content += generate_rule_markdown(rule, idx, citation_manager)
                         static_written += 1
                     except Exception as e:
                         print(f"  ⚠️ Warning: Error processing rule: {e}")
