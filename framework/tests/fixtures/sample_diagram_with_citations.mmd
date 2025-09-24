@@ -1,0 +1,25 @@
+graph TD
+    %% Sample Mermaid diagram with citations
+
+    %% Valid citations
+    A[codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/web/TradeActionController.java] --> B[codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/TradeService.java]
+
+    B --> C["codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/repository/OrderRepository.java"]
+
+    C --> D[codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/repository/AccountRepository.java]
+
+    %% Invalid citations (these don't exist)
+    B --> E[src/main/java/NonExistentService.java]
+
+    E --> F["fake/InvalidRepository.java"]
+
+    %% Mixed node with description
+    D --> G[Database<br/>schema.sql]
+
+    %% Node with class containing citation
+    B:::highlight
+
+    classDef highlight fill:#f9f,stroke:#333,stroke-width:4px
+
+    %% Note with citation
+    B -.-> H[Note: See codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/util/MarketUtils.java for utilities]

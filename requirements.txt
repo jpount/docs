@@ -1,0 +1,20 @@
+# Python Requirements for Codebase Analysis Framework
+# These are optional but recommended for enhanced functionality
+
+# For colored terminal output on Windows
+colorama>=0.4.6 ; platform_system == "Windows"
+
+# For JSON validation and manipulation
+jsonschema>=4.0.0
+
+# For YAML processing (tech stack presets)
+PyYAML>=6.0
+
+# For path handling improvements
+pathlib2>=2.3.7 ; python_version < "3.4"
+
+# Additional utilities
+python-multipart>=0.0.6
+
+# diagram validation
+mermaid-cli

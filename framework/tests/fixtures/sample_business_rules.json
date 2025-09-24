@@ -1,0 +1,35 @@
+{
+  "rules": [
+    {
+      "id": "BR001",
+      "name": "Maximum Order Amount",
+      "description": "Orders cannot exceed $10,000 per transaction",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/TradeService.java",
+      "category": "Trading Limits"
+    },
+    {
+      "id": "BR002",
+      "name": "Account Balance Check",
+      "description": "Account must have sufficient balance before order execution",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/impl/TradeServiceImpl.java",
+      "category": "Account Management"
+    },
+    {
+      "id": "BR003",
+      "name": "Market Hours Trading",
+      "description": "Trading only allowed during market hours (9:30 AM - 4:00 PM EST)",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/util/MarketUtils.java",
+      "category": "Trading Hours"
+    }
+  ],
+  "implementations": [
+    {
+      "rule_id": "BR001",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/validators/OrderValidator.java"
+    },
+    {
+      "rule_id": "BR002",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/validators/AccountValidator.java"
+    }
+  ]
+}

@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 2px,
+                rgba(255, 255, 255, 0.05) 2px,
+                rgba(255, 255, 255, 0.05) 4px
+            );
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .toolbar {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .directory-upload-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .upload-button {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(52, 152, 219, 0.3);
+        }
+
+        .upload-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .directory-input {
+            display: none;
+        }
+
+        .view-toggle {
+            display: flex;
+            background: #e9ecef;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            color: #6c757d;
+        }
+
+        .toggle-btn.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .theme-toggle {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            background: #5a6268;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            background: #e9ecef;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-filter {
+            display: flex;
+            gap: 5px;
+        }
+
+        .filter-btn {
+            background: transparent;
+            border: 1px solid #dee2e6;
+            border-radius: 15px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+            color: #6c757d;
+        }
+
+        .filter-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .filter-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .directory-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .sidebar-footer {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-top: 1px solid #dee2e6;
+            font-size: 0.85rem;
+            color: #6c757d;
+            flex-shrink: 0;
+        }
+
+        .file-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 8px;
+            margin: 2px 0;
+            transition: all 0.2s ease;
+            word-break: break-word;
+            position: relative;
+        }
+
+        .tree-item:hover {
+            background: #e3f2fd;
+        }
+
+        .tree-item.selected {
+            background: #3498db;
+            color: white;
+        }
+
+        .tree-item.directory {
+            font-weight: 500;
+            color: #2c3e50;
+            cursor: default;
+        }
+
+        .tree-item.file {
+            color: #495057;
+        }
+
+        .tree-item[data-level="1"] { padding-left: 24px; }
+        .tree-item[data-level="2"] { padding-left: 48px; }
+        .tree-item[data-level="3"] { padding-left: 72px; }
+        .tree-item[data-level="4"] { padding-left: 96px; }
+        .tree-item[data-level="5"] { padding-left: 120px; }
+
+        .tree-item.file.markdown {
+            color: #e67e22;
+        }
+
+        .tree-item.file.mermaid {
+            color: #9b59b6;
+        }
+
+        .tree-icon {
+            margin-right: 8px;
+            font-size: 0.9rem;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .editor-section {
+            display: flex;
+            flex-direction: column;
+            border-bottom: 1px solid #e9ecef;
+            min-width: 0;
+        }
+
+        .editor-header {
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .save-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        .save-button:hover {
+            background: #218838;
+        }
+
+        .save-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .document-editor {
+            flex: 1;
+            border: none;
+            padding: 20px;
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            background: #fafafa;
+            color: #2c3e50;
+            min-height: 200px;
+            overflow-y: auto;
+        }
+
+        .preview-section {
+            display: flex;
+            flex-direction: column;
+            background: white;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .preview-header {
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+            color: #495057;
+            flex-shrink: 0;
+        }
+
+        .document-preview {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            background: white;
+        }
+
+        .main-content.split-view .content-area {
+            flex-direction: row;
+        }
+
+        .main-content.split-view .editor-section {
+            flex: 1;
+            border-bottom: none;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .main-content.split-view .preview-section {
+            flex: 1;
+        }
+
+        .main-content.editor-view .content-area {
+            flex-direction: column;
+        }
+
+        .main-content.editor-view .editor-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: none;
+        }
+
+        .main-content.editor-view .preview-section {
+            display: none;
+        }
+
+        .main-content.preview-view .content-area {
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .main-content.preview-view .editor-section {
+            display: none;
+        }
+
+        .main-content.preview-view .preview-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .main-content.preview-view .document-preview {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Resizer for split view */
+        .resizer {
+            width: 4px;
+            background: #e9ecef;
+            cursor: col-resize;
+            flex-shrink: 0;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        .resizer:hover {
+            background: #3498db;
+        }
+
+        .main-content.editor-view .resizer,
+        .main-content.preview-view .resizer {
+            display: none;
+        }
+
+        /* Markdown Styles */
+        .document-preview h1,
+        .document-preview h2,
+        .document-preview h3,
+        .document-preview h4,
+        .document-preview h5,
+        .document-preview h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #2c3e50;
+        }
+
+        .document-preview h1 {
+            font-size: 2rem;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+
+        .document-preview h2 {
+            font-size: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 8px;
+        }
+
+        .document-preview h3 {
+            font-size: 1.25rem;
+        }
+
+        .document-preview h4 {
+            font-size: 1rem;
+        }
+
+        .document-preview p {
+            margin-bottom: 16px;
+            line-height: 1.7;
+            color: #333;
+        }
+
+        .document-preview ul,
+        .document-preview ol {
+            margin-bottom: 16px;
+            padding-left: 30px;
+        }
+
+        .document-preview li {
+            margin-bottom: 4px;
+            line-height: 1.6;
+        }
+
+        .document-preview blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 16px;
+            margin: 16px 0;
+            color: #6c757d;
+            font-style: italic;
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .document-preview code {
+            background: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e91e63;
+        }
+
+        .document-preview pre {
+            background: #f6f8fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        .document-preview pre code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            color: inherit;
+        }
+
+        .document-preview table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .document-preview th,
+        .document-preview td {
+            border: 1px solid #e9ecef;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .document-preview th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .document-preview tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .document-preview a {
+            color: #3498db;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .document-preview a:hover {
+            border-bottom-color: #3498db;
+        }
+
+        .document-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin: 16px 0;
+        }
+
+        .document-preview hr {
+            border: none;
+            height: 2px;
+            background: linear-gradient(to right, #3498db, #2980b9);
+            margin: 24px 0;
+            border-radius: 1px;
+        }
+
+        /* Mermaid diagram container */
+        .mermaid {
+            text-align: center;
+            margin: 20px 0;
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .mermaid-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+            background: #fafafa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .placeholder {
+            color: #6c757d;
+            font-style: italic;
+            text-align: center;
+            padding: 60px 20px;
+            font-size: 1.1rem;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            background: #fdf2f2;
+            border: 1px solid #f5c6cb;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Dark theme */
+        .dark-theme {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        }
+
+        .dark-theme .container {
+            background: rgba(44, 62, 80, 0.95);
+            color: #ecf0f1;
+        }
+
+        .dark-theme .toolbar,
+        .dark-theme .sidebar,
+        .dark-theme .sidebar-header,
+        .dark-theme .editor-header,
+        .dark-theme .preview-header {
+            background: #34495e;
+            border-color: #4a5568;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-editor {
+            background: #2c3e50;
+            color: #ecf0f1;
+            border-color: #4a5568;
+        }
+
+        .dark-theme .document-preview {
+            background: #34495e;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .tree-item:hover {
+            background: #4a5568;
+        }
+
+        .dark-theme .tree-item.selected {
+            background: #3498db;
+            color: white;
+        }
+
+        .dark-theme .filter-btn {
+            border-color: #4a5568;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .filter-btn:hover {
+            background: #4a5568;
+        }
+
+        .dark-theme .filter-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .dark-theme .sidebar-footer {
+            background: #34495e;
+            border-color: #4a5568;
+            color: #bdc3c7;
+        }
+
+        /* Dark theme markdown styles */
+        .dark-theme .document-preview h1,
+        .dark-theme .document-preview h2,
+        .dark-theme .document-preview h3,
+        .dark-theme .document-preview h4,
+        .dark-theme .document-preview h5,
+        .dark-theme .document-preview h6 {
+            color: #ecf0f1;
+            border-color: #4a5568;
+        }
+
+        .dark-theme .document-preview p {
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview ul,
+        .dark-theme .document-preview ol {
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview li {
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview blockquote {
+            background: #2c3e50;
+            border-left-color: #3498db;
+            color: #bdc3c7;
+        }
+
+        .dark-theme .document-preview code {
+            background: #2c3e50;
+            color: #e74c3c;
+        }
+
+        .dark-theme .document-preview pre {
+            background: #1a252f;
+            border-color: #4a5568;
+        }
+
+        .dark-theme .document-preview pre code {
+            background: transparent;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview table {
+            border-color: #4a5568;
+        }
+
+        .dark-theme .document-preview th,
+        .dark-theme .document-preview td {
+            border-color: #4a5568;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview th {
+            background: #2c3e50;
+            color: #ecf0f1;
+        }
+
+        .dark-theme .document-preview tbody tr:nth-child(even) {
+            background: #2c3e50;
+        }
+
+        .dark-theme .document-preview a {
+            color: #5dade2;
+        }
+
+        .dark-theme .document-preview a:hover {
+            border-bottom-color: #5dade2;
+        }
+
+        .dark-theme .document-preview hr {
+            background: linear-gradient(to right, #3498db, #2980b9);
+        }
+
+        /* Dark theme mermaid diagrams */
+        .dark-theme .mermaid {
+            background: #2c3e50;
+            border-color: #4a5568;
+        }
+
+        .dark-theme .mermaid-diagram {
+            background: #2c3e50;
+            border-color: #4a5568;
+        }
+
+        /* Dark theme code highlighting override */
+        .dark-theme .hljs {
+            background: #1a252f !important;
+            color: #ecf0f1 !important;
+        }
+
+        /* Dark theme placeholder and error messages */
+        .dark-theme .placeholder {
+            color: #95a5a6;
+        }
+
+        .dark-theme .error-message {
+            color: #e74c3c;
+            background: #2c1a1a;
+            border-color: #8b3a3a;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                height: calc(100vh - 20px);
+                margin: 10px;
+                border-radius: 15px;
+            }
+
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .main-content {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 200px;
+                border-right: none;
+                border-bottom: 1px solid #e9ecef;
+            }
+
+            .content-area {
+                flex-direction: column !important;
+            }
+
+            .editor-section {
+                border-right: none;
+                border-bottom: 1px solid #e9ecef;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+
+            .directory-upload-container {
+                justify-content: center;
+            }
+        }
+
+        .current-file {
+            font-size: 0.9rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Document Viewer</h1>
+            <p>Browse directories and edit both Markdown (.md) and Mermaid (.mmd) files with live preview</p>
+        </div>
+
+        <div class="toolbar">
+            <div class="directory-upload-container">
+                <button class="upload-button" onclick="document.getElementById('directoryInput').click()">
+                    📁 Open Directory
+                </button>
+                <input type="file" id="directoryInput" class="directory-input" webkitdirectory directory multiple>
+                <span class="current-file" id="currentFile">No directory selected</span>
+            </div>
+
+            <div class="view-toggle">
+                <button class="toggle-btn active" data-view="split" onclick="setView('split')">Split View</button>
+                <button class="toggle-btn" data-view="editor" onclick="setView('editor')">Editor Only</button>
+                <button class="toggle-btn" data-view="preview" onclick="setView('preview')">Preview Only</button>
+            </div>
+
+            <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+        </div>
+
+        <div class="main-content split-view" id="mainContent">
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <span>📁 Directory Browser</span>
+                    <div class="file-filter">
+                        <button class="filter-btn active" data-filter="both" onclick="setFileFilter('both')" title="Show both MD and MMD files">📄</button>
+                        <button class="filter-btn" data-filter="markdown" onclick="setFileFilter('markdown')" title="Show only Markdown files">📝</button>
+                        <button class="filter-btn" data-filter="mermaid" onclick="setFileFilter('mermaid')" title="Show only Mermaid files">🔷</button>
+                    </div>
+                </div>
+                <div class="directory-tree" id="directoryTree">
+                    <div class="placeholder">Select a directory to browse files</div>
+                </div>
+                <div class="sidebar-footer" id="sidebarFooter">
+                    <div class="file-stats">
+                        <span class="file-stat"><span id="displayedCount">0</span> displayed</span>
+                        <span class="file-stat">📝 <span id="displayedMdCount">0</span></span>
+                        <span class="file-stat">🔷 <span id="displayedMmdCount">0</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area" id="contentArea">
+                <div class="editor-section" id="editorSection">
+                    <div class="editor-header">
+                        <span id="editorTitle">📝 Document Editor</span>
+                        <button class="save-button" id="saveButton" onclick="saveFile()" disabled>💾 Save</button>
+                    </div>
+                    <textarea 
+                        id="documentEditor" 
+                        class="document-editor" 
+                        placeholder="Select a file from the directory browser to start editing, or open a directory first..."
+                    ></textarea>
+                </div>
+
+                <div class="resizer" id="resizer"></div>
+
+                <div class="preview-section" id="previewSection">
+                    <div class="preview-header" id="previewTitle">👁️ Live Preview</div>
+                    <div class="document-preview" id="documentPreview">
+                        <div class="placeholder">Select a file to see the preview here...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize libraries
+        mermaid.initialize({ 
+            startOnLoad: false,
+            theme: 'default',
+            themeVariables: {
+                fontFamily: 'arial, sans-serif'
+            },
+            flowchart: { 
+                useMaxWidth: true, 
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            sequence: { useMaxWidth: true },
+            gantt: { useMaxWidth: true },
+            er: { useMaxWidth: true },
+            journey: { useMaxWidth: true },
+            gitgraph: { useMaxWidth: true },
+            c4: { useMaxWidth: true }
+        });
+
+        // Configure marked for better rendering
+        marked.setOptions({
+            highlight: function(code, lang) {
+                // Don't highlight mermaid code blocks - we'll handle them separately
+                if (lang === 'mermaid' || lang === 'mmd') {
+                    return code;
+                }
+                
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, {language: lang}).value;
+                    } catch (err) {
+                        console.error('Highlight.js error:', err);
+                    }
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            breaks: true,
+            gfm: true,
+            pedantic: false,
+            sanitize: false
+        });
+
+        // Elements
+        const directoryInput = document.getElementById('directoryInput');
+        const documentEditor = document.getElementById('documentEditor');
+        const documentPreview = document.getElementById('documentPreview');
+        const currentFile = document.getElementById('currentFile');
+        const directoryTree = document.getElementById('directoryTree');
+        const mainContent = document.getElementById('mainContent');
+        const editorSection = document.getElementById('editorSection');
+        const previewSection = document.getElementById('previewSection');
+        const resizer = document.getElementById('resizer');
+        const saveButton = document.getElementById('saveButton');
+        const editorTitle = document.getElementById('editorTitle');
+        const previewTitle = document.getElementById('previewTitle');
+
+        let isDarkTheme = false;
+        let isResizing = false;
+        let currentFileHandle = null;
+        let currentFileContent = '';
+        let fileHandles = new Map();
+        let directoryHandle = null;
+        let currentFileTree = null;
+        let currentFileFilter = 'both';
+
+        // Directory input handling
+        directoryInput.addEventListener('change', (e) => {
+            handleDirectorySelect(e.target.files);
+        });
+
+        function handleDirectorySelect(files) {
+            if (files.length === 0) return;
+
+            console.log('=== DIRECTORY SELECT DEBUG ===');
+            console.log('Total files received:', files.length);
+            
+            // Log first few files to see what we're getting
+            const fileArray = Array.from(files);
+            console.log('First 10 files:', fileArray.slice(0, 10).map(f => ({
+                name: f.name,
+                path: f.webkitRelativePath,
+                size: f.size
+            })));
+
+            // Filter to only include .md and .mmd files
+            const filteredFiles = fileArray.filter(file => {
+                const name = file.name.toLowerCase();
+                const isMd = name.endsWith('.md') || name.endsWith('.markdown');
+                const isMmd = name.endsWith('.mmd');
+                
+                // Debug log for each file
+                if (name.includes('.')) {
+                    const ext = name.substring(name.lastIndexOf('.'));
+                    if (ext === '.mmd' || name.includes('mmd')) {
+                        console.log(`File check - Name: ${file.name}, Path: ${file.webkitRelativePath}, isMmd: ${isMmd}, ext: ${ext}`);
+                    }
+                }
+                
+                return isMd || isMmd;
+            });
+
+            // Count file types
+            const mdCount = filteredFiles.filter(f => f.name.toLowerCase().endsWith('.md') || f.name.toLowerCase().endsWith('.markdown')).length;
+            const mmdCount = filteredFiles.filter(f => f.name.toLowerCase().endsWith('.mmd')).length;
+            
+            console.log(`Filtered results: ${filteredFiles.length} total (${mdCount} .md, ${mmdCount} .mmd)`);
+            console.log('MMD files found:', filteredFiles.filter(f => f.name.toLowerCase().endsWith('.mmd')).map(f => f.webkitRelativePath));
+
+            if (filteredFiles.length === 0) {
+                currentFile.textContent = 'No .md or .mmd files found in directory';
+                directoryTree.innerHTML = '<div class="placeholder">No editable files found in the selected directory</div>';
+                return;
+            }
+
+            currentFileTree = buildFileTree(filteredFiles);
+            renderDirectoryTree(currentFileTree);
+            updateDisplayedCounts(); // Update counts after rendering
+            
+            currentFile.textContent = `${filteredFiles.length} files (${mdCount} .md, ${mmdCount} .mmd)`;
+            
+            // Store file handles for saving (only filtered files)
+            fileHandles.clear();
+            for (const file of filteredFiles) {
+                fileHandles.set(file.webkitRelativePath, file);
+            }
+        }
+
+        function buildFileTree(files) {
+            const tree = {};
+            
+            console.log('=== BUILD FILE TREE DEBUG ===');
+            console.log('Building tree for', files.length, 'files');
+            
+            // Check what the root directory is
+            if (files.length > 0) {
+                const firstPath = files[0].webkitRelativePath;
+                const rootDir = firstPath.split('/')[0];
+                console.log('Root directory detected:', rootDir);
+                console.log('Sample paths:', files.slice(0, 3).map(f => f.webkitRelativePath));
+            }
+            
+            for (const file of files) {
+                const path = file.webkitRelativePath;
+                const parts = path.split('/');
+                
+                // Debug log for .mmd files
+                if (file.name.toLowerCase().endsWith('.mmd')) {
+                    console.log('Building tree for MMD file:', {
+                        name: file.name,
+                        path: path,
+                        parts: parts,
+                        startIndex: 1,
+                        pathAfterRoot: parts.slice(1)
+                    });
+                }
+                
+                // Skip the root directory (first part) to avoid redundant nesting
+                let current = tree;
+                const startIndex = 1; // Skip the first directory which is the selected root
+                
+                for (let i = startIndex; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (i === parts.length - 1) {
+                        // This is a file
+                        current[part] = {
+                            type: 'file',
+                            file: file,
+                            path: path
+                        };
+                        
+                        if (file.name.toLowerCase().endsWith('.mmd')) {
+                            console.log('Added MMD file to tree:', part, 'at path:', Object.keys(current));
+                        }
+                    } else {
+                        // This is a directory
+                        if (!current[part]) {
+                            current[part] = {
+                                type: 'directory',
+                                children: {}
+                            };
+                        }
+                        current = current[part].children;
+                    }
+                }
+            }
+            
+            // More focused debugging for the tree structure
+            console.log('=== FINAL TREE STRUCTURE ===');
+            console.log('Top level keys:', Object.keys(tree));
+            
+            // Check diagrams folder specifically
+            if (tree.diagrams) {
+                console.log('Diagrams folder found:', {
+                    type: tree.diagrams.type,
+                    childrenKeys: Object.keys(tree.diagrams.children || {})
+                });
+                
+                // List any .mmd files in diagrams
+                const diagramsChildren = tree.diagrams.children || {};
+                const mmdFiles = Object.entries(diagramsChildren)
+                    .filter(([name, item]) => name.toLowerCase().endsWith('.mmd'))
+                    .map(([name]) => name);
+                console.log('MMD files in diagrams folder:', mmdFiles);
+            }
+            
+            console.log('Full tree (first 2 levels):', JSON.stringify(tree, (key, value) => {
+                // Limit depth for readability
+                if (key === 'file') return '[File object]';
+                return value;
+            }, 2));
+            
+            return tree;
+        }
+
+        // Global counters for rendered files
+        let renderedMdCount = 0;
+        let renderedMmdCount = 0;
+
+        function renderDirectoryTree(tree, parentElement = directoryTree, level = 0, isRoot = true) {
+            if (isRoot && parentElement === directoryTree) {
+                parentElement.innerHTML = '';
+                renderedMdCount = 0;
+                renderedMmdCount = 0;
+                console.log('=== RENDER DIRECTORY TREE DEBUG ===');
+                console.log('Starting render with filter:', currentFileFilter);
+            }
+            
+            const entries = Object.entries(tree).sort(([a, aValue], [b, bValue]) => {
+                // Directories first, then files
+                if (aValue.type !== bValue.type) {
+                    return aValue.type === 'directory' ? -1 : 1;
+                }
+                return a.localeCompare(b);
+            });
+            
+            if (level === 0) {
+                console.log('Top level entries:', entries.map(([name, item]) => ({
+                    name,
+                    type: item.type,
+                    hasChildren: item.type === 'directory' ? Object.keys(item.children || {}).length : 0
+                })));
+            }
+            
+            for (const [name, item] of entries) {
+                const treeItem = document.createElement('div');
+                treeItem.className = `tree-item ${item.type}`;
+                treeItem.setAttribute('data-level', level);
+                
+                if (item.type === 'directory') {
+                    treeItem.innerHTML = `<span class="tree-icon">📁</span>${name}`;
+                    parentElement.appendChild(treeItem);
+                    
+                    const childrenKeys = Object.keys(item.children || {});
+                    console.log(`Rendering directory: ${name} at level ${level}`);
+                    console.log(`  Children count: ${childrenKeys.length}`);
+                    
+                    if (name === 'diagrams') {
+                        console.log('  Diagrams children:', childrenKeys);
+                        const mmdChildren = childrenKeys.filter(k => k.toLowerCase().endsWith('.mmd'));
+                        console.log('  MMD files in diagrams:', mmdChildren);
+                    }
+                    
+                    // Recursively render children
+                    renderDirectoryTree(item.children, parentElement, level + 1, false);
+                } else {
+                    // Since we pre-filtered files, we know these are all .md or .mmd
+                    const isMarkdown = name.toLowerCase().endsWith('.md') || name.toLowerCase().endsWith('.markdown');
+                    const isMermaid = name.toLowerCase().endsWith('.mmd');
+                    
+                    if (isMermaid) {
+                        console.log(`Rendering MMD file: ${name} at level ${level}, filter: ${currentFileFilter}`);
+                    }
+                    
+                    // Apply filter
+                    let shouldShow = false;
+                    if (currentFileFilter === 'both') {
+                        shouldShow = true;
+                    } else if (currentFileFilter === 'markdown' && isMarkdown) {
+                        shouldShow = true;
+                    } else if (currentFileFilter === 'mermaid' && isMermaid) {
+                        shouldShow = true;
+                    }
+                    
+                    if (shouldShow) {
+                        const icon = isMarkdown ? '📝' : '🔷';
+                        treeItem.classList.add(isMarkdown ? 'markdown' : 'mermaid');
+                        treeItem.innerHTML = `<span class="tree-icon">${icon}</span>${name}`;
+                        treeItem.addEventListener('click', () => loadFile(item));
+                        parentElement.appendChild(treeItem);
+                        
+                        // Count rendered files
+                        if (isMarkdown) {
+                            renderedMdCount++;
+                        } else if (isMermaid) {
+                            renderedMmdCount++;
+                            console.log(`Successfully rendered MMD file: ${name}`);
+                        }
+                    } else if (isMermaid) {
+                        console.log(`MMD file ${name} filtered out - shouldShow: ${shouldShow}`);
+                    }
+                }
+            }
+            
+            // Note: Update counts are now called from handleDirectorySelect and setFileFilter
+        }
+
+        function updateDisplayedCounts() {
+            const totalDisplayed = renderedMdCount + renderedMmdCount;
+            document.getElementById('displayedCount').textContent = totalDisplayed;
+            document.getElementById('displayedMdCount').textContent = renderedMdCount;
+            document.getElementById('displayedMmdCount').textContent = renderedMmdCount;
+            
+            console.log('=== RENDERED FILE COUNTS ===');
+            console.log(`Total displayed: ${totalDisplayed}`);
+            console.log(`Markdown files displayed: ${renderedMdCount}`);
+            console.log(`Mermaid files displayed: ${renderedMmdCount}`);
+            console.log('Filter:', currentFileFilter);
+        }
+
+        function loadFile(fileItem) {
+            const file = fileItem.file;
+            currentFileHandle = fileItem;
+            
+            // Update UI
+            document.querySelectorAll('.tree-item').forEach(item => item.classList.remove('selected'));
+            event.target.classList.add('selected');
+            
+            // Read file content
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                currentFileContent = content;
+                documentEditor.value = content;
+                
+                // Update headers
+                editorTitle.textContent = `📝 Editing: ${file.name}`;
+                previewTitle.textContent = `👁️ Preview: ${file.name}`;
+                currentFile.textContent = file.webkitRelativePath;
+                
+                // Enable save button
+                saveButton.disabled = false;
+                
+                // Render preview
+                renderDocument();
+            };
+            reader.readAsText(file);
+        }
+
+        // Resizer functionality
+        resizer.addEventListener('mousedown', (e) => {
+            if (!mainContent.classList.contains('split-view')) return;
+            
+            isResizing = true;
+            document.addEventListener('mousemove', handleResize);
+            document.addEventListener('mouseup', stopResize);
+            e.preventDefault();
+        });
+
+        function handleResize(e) {
+            if (!isResizing || !mainContent.classList.contains('split-view')) return;
+            
+            const containerRect = document.getElementById('contentArea').getBoundingClientRect();
+            const newLeftWidth = e.clientX - containerRect.left;
+            const containerWidth = containerRect.width;
+            const resizerWidth = 4;
+            
+            const leftPercent = Math.max(20, Math.min(80, (newLeftWidth / containerWidth) * 100));
+            const rightPercent = 100 - leftPercent - (resizerWidth / containerWidth * 100);
+            
+            editorSection.style.setProperty('flex', `0 0 ${leftPercent}%`, 'important');
+            previewSection.style.setProperty('flex', `0 0 ${rightPercent}%`, 'important');
+        }
+
+        function stopResize() {
+            isResizing = false;
+            document.removeEventListener('mousemove', handleResize);
+            document.removeEventListener('mouseup', stopResize);
+        }
+
+        // Document rendering
+        async function renderDocument() {
+            const content = documentEditor.value;
+            
+            if (!content.trim()) {
+                documentPreview.innerHTML = '<div class="placeholder">Start typing to see the preview here...</div>';
+                return;
+            }
+
+            const isMarkdown = currentFileHandle && (currentFileHandle.file.name.endsWith('.md') || currentFileHandle.file.name.endsWith('.markdown'));
+            const isMermaid = currentFileHandle && currentFileHandle.file.name.endsWith('.mmd');
+
+            try {
+                if (isMarkdown) {
+                    await renderMarkdown(content);
+                } else if (isMermaid) {
+                    renderMermaid(content);
+                } else {
+                    // Plain text
+                    documentPreview.innerHTML = `<pre style="white-space: pre-wrap; font-family: monospace;">${escapeHtml(content)}</pre>`;
+                }
+            } catch (error) {
+                console.error('Rendering error:', error);
+                documentPreview.innerHTML = `<div class="error-message">
+                    <strong>Rendering Error:</strong> ${error.message || 'Failed to render document'}
+                </div>`;
+            }
+        }
+
+        async function renderMarkdown(content) {
+            let html = marked.parse(content);
+
+            // Process Mermaid diagrams in markdown - comprehensive approach
+            // Handle various formats: ```mermaid, ```mmd, and already processed code blocks
+            
+            // First, handle raw mermaid blocks that weren't processed by marked
+            html = html.replace(/```(?:mermaid|mmd)\s*\n([\s\S]*?)\n```/g, (match, diagram) => {
+                const diagramId = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                return `<div class="mermaid" id="${diagramId}">${diagram.trim()}</div>`;
+            });
+
+            // Handle code blocks that were processed by marked (language-mermaid class)
+            html = html.replace(/<pre><code class="(?:language-)?mermaid">([\s\S]*?)<\/code><\/pre>/g, (match, diagram) => {
+                const diagramId = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                // Decode HTML entities that might have been encoded by marked
+                const decodedDiagram = diagram.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+                return `<div class="mermaid" id="${diagramId}">${decodedDiagram.trim()}</div>`;
+            });
+
+            // Handle code blocks with language-mmd class (alternative naming)
+            html = html.replace(/<pre><code class="(?:language-)?mmd">([\s\S]*?)<\/code><\/pre>/g, (match, diagram) => {
+                const diagramId = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                const decodedDiagram = diagram.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+                return `<div class="mermaid" id="${diagramId}">${decodedDiagram.trim()}</div>`;
+            });
+
+            // Handle plain code blocks that might be mermaid (as fallback)
+            html = html.replace(/<pre><code>(graph\s+(?:TD|TB|BT|RL|LR)|flowchart\s+(?:TD|TB|BT|RL|LR)|sequenceDiagram|classDiagram|erDiagram|gitgraph|journey|gantt|pie|stateDiagram|c4Context|mindmap|timeline|sankey)([\s\S]*?)<\/code><\/pre>/g, (match, diagramType, diagram) => {
+                const diagramId = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                const decodedDiagram = (diagramType + diagram).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+                return `<div class="mermaid" id="${diagramId}">${decodedDiagram.trim()}</div>`;
+            });
+
+            documentPreview.innerHTML = html;
+
+            // Render embedded Mermaid diagrams
+            const mermaidElements = documentPreview.querySelectorAll('.mermaid');
+            
+            console.log(`Found ${mermaidElements.length} Mermaid diagram(s) to render`);
+            
+            // Process each mermaid element sequentially to avoid conflicts
+            for (const element of mermaidElements) {
+                try {
+                    const diagramText = element.textContent.trim();
+                    const diagramId = element.id;
+                    
+                    if (diagramText) {
+                        console.log('Rendering Mermaid diagram:', diagramId);
+                        console.log('Diagram content:', diagramText.substring(0, 100) + (diagramText.length > 100 ? '...' : ''));
+                        
+                        const { svg } = await mermaid.render(diagramId + '-svg', diagramText);
+                        element.innerHTML = svg;
+                        console.log('Successfully rendered diagram:', diagramId);
+                    }
+                } catch (error) {
+                    console.error('Mermaid rendering error:', error);
+                    console.error('Failed diagram content:', element.textContent);
+                    element.innerHTML = `<div class="error-message">
+                        <strong>Mermaid Error:</strong> ${error.message || 'Failed to render diagram'}<br>
+                        <small>Diagram type: ${element.textContent.trim().split('\n')[0]}</small><br>
+                        <details>
+                            <summary>View diagram source</summary>
+                            <pre style="font-size: 0.8em; max-height: 200px; overflow: auto;">${element.textContent}</pre>
+                        </details>
+                    </div>`;
+                }
+            }
+        }
+
+        function renderMermaid(content) {
+            documentPreview.innerHTML = '<div class="mermaid-diagram" id="mermaidDiagram"></div>';
+            const diagramContainer = document.getElementById('mermaidDiagram');
+            
+            if (!content.trim()) {
+                diagramContainer.innerHTML = '<div class="placeholder">Enter Mermaid diagram code to see the preview</div>';
+                return;
+            }
+
+            try {
+                const diagramId = 'mermaid-' + Date.now();
+                mermaid.render(diagramId, content).then(({svg}) => {
+                    diagramContainer.innerHTML = svg;
+                }).catch(error => {
+                    console.error('Mermaid rendering error:', error);
+                    diagramContainer.innerHTML = `<div class="error-message">
+                        <strong>Mermaid Error:</strong> ${error.message || error}
+                    </div>`;
+                });
+            } catch (error) {
+                console.error('Error:', error);
+                diagramContainer.innerHTML = `<div class="error-message">
+                    <strong>Error parsing diagram:</strong> ${error.message || error}
+                </div>`;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-render on input
+        let renderTimeout;
+        documentEditor.addEventListener('input', () => {
+            clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(renderDocument, 300);
+        });
+
+        // Save functionality
+        async function saveFile() {
+            if (!currentFileHandle) return;
+            
+            try {
+                // Create a new file with updated content
+                const blob = new Blob([documentEditor.value], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                // Create download link
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = currentFileHandle.file.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                // Update stored content
+                currentFileContent = documentEditor.value;
+                
+                alert('File downloaded! Since this is a web application, the file has been downloaded to your default download folder.');
+            } catch (error) {
+                console.error('Save error:', error);
+                alert('Error saving file: ' + error.message);
+            }
+        }
+
+        // File filter functionality
+        function setFileFilter(filter) {
+            currentFileFilter = filter;
+            
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+            
+            // Re-render the tree with new filter
+            if (currentFileTree) {
+                renderDirectoryTree(currentFileTree);
+                updateDisplayedCounts(); // Update counts after re-rendering
+            }
+        }
+
+        // View toggle functionality
+        function setView(view) {
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-view="${view}"]`).classList.add('active');
+
+            mainContent.classList.remove('split-view', 'editor-view', 'preview-view');
+            editorSection.style.removeProperty('flex');
+            previewSection.style.removeProperty('flex');
+            
+            mainContent.classList.add(view + '-view');
+            mainContent.offsetHeight; // Force reflow
+        }
+
+        // Theme toggle
+        function toggleTheme() {
+            isDarkTheme = !isDarkTheme;
+            const themeToggle = document.querySelector('.theme-toggle');
+            
+            if (isDarkTheme) {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️ Light Mode';
+                mermaid.initialize({ 
+                    startOnLoad: false,
+                    theme: 'dark',
+                    flowchart: { useMaxWidth: true, htmlLabels: true },
+                    sequence: { useMaxWidth: true },
+                    gantt: { useMaxWidth: true },
+                    er: { useMaxWidth: true },
+                    journey: { useMaxWidth: true }
+                });
+            } else {
+                document.body.classList.remove('dark-theme');
+                themeToggle.textContent = '🌙 Dark Mode';
+                mermaid.initialize({ 
+                    startOnLoad: false,
+                    theme: 'default',
+                    flowchart: { useMaxWidth: true, htmlLabels: true },
+                    sequence: { useMaxWidth: true },
+                    gantt: { useMaxWidth: true },
+                    er: { useMaxWidth: true },
+                    journey: { useMaxWidth: true }
+                });
+            }
+            
+            // Re-render to apply theme changes
+            renderDocument();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        setView('split');
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        setView('editor');
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        setView('preview');
+                        break;
+                    case 'd':
+                        e.preventDefault();
+                        toggleTheme();
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        if (!saveButton.disabled) {
+                            saveFile();
+                        }
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "categories": {
+    "controllers": [
+      {
+        "name": "TradeActionController",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/web/TradeActionController.java"
+      },
+      {
+        "name": "TradeConfigController",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/web/TradeConfigController.java"
+      }
+    ],
+    "services": [
+      {
+        "name": "TradeService",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/TradeService.java"
+      },
+      {
+        "name": "OrderService",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/OrderService.java"
+      }
+    ],
+    "repositories": [
+      {
+        "name": "AccountRepository",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/repository/AccountRepository.java"
+      },
+      {
+        "name": "OrderRepository",
+        "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/repository/OrderRepository.java"
+      }
+    ]
+  },
+  "implementations": [
+    {
+      "pattern": "Trading Logic",
+      "location": "codebase/daytrader/src/main/java/com/ibm/websphere/samples/daytrader/service/impl/TradeServiceImpl.java"
+    }
+  ]
+}
