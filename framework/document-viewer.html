@@ -173,13 +173,14 @@
 
         .sidebar-header {
             background: #e9ecef;
-            padding: 15px 20px;
+            padding: 10px 15px;
             border-bottom: 1px solid #dee2e6;
             font-weight: 600;
             color: #495057;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 0.9rem;
         }
 
         .file-filter {
@@ -211,7 +212,7 @@
         .directory-tree {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 4px 6px;
         }
 
         .sidebar-footer {
@@ -238,13 +239,15 @@
         .tree-item {
             display: flex;
             align-items: center;
-            padding: 8px 12px;
+            padding: 3px 8px;
             cursor: pointer;
-            border-radius: 8px;
-            margin: 2px 0;
+            border-radius: 4px;
+            margin: 1px 0;
             transition: all 0.2s ease;
             word-break: break-word;
             position: relative;
+            font-size: 0.85rem;
+            line-height: 1.4;
         }
 
         .tree-item:hover {
@@ -260,17 +263,19 @@
             font-weight: 500;
             color: #2c3e50;
             cursor: default;
+            padding: 3px 8px;
+            margin: 2px 0;
         }
 
         .tree-item.file {
             color: #495057;
         }
 
-        .tree-item[data-level="1"] { padding-left: 24px; }
-        .tree-item[data-level="2"] { padding-left: 48px; }
-        .tree-item[data-level="3"] { padding-left: 72px; }
-        .tree-item[data-level="4"] { padding-left: 96px; }
-        .tree-item[data-level="5"] { padding-left: 120px; }
+        .tree-item[data-level="1"] { padding-left: 16px; }
+        .tree-item[data-level="2"] { padding-left: 32px; }
+        .tree-item[data-level="3"] { padding-left: 48px; }
+        .tree-item[data-level="4"] { padding-left: 64px; }
+        .tree-item[data-level="5"] { padding-left: 80px; }
 
         .tree-item.file.markdown {
             color: #e67e22;
@@ -281,8 +286,9 @@
         }
 
         .tree-icon {
-            margin-right: 8px;
-            font-size: 0.9rem;
+            margin-right: 4px;
+            font-size: 0.75rem;
+            flex-shrink: 0;
         }
 
         .content-area {
@@ -588,16 +594,123 @@
             border-radius: 8px;
             padding: 20px;
             border: 1px solid #e9ecef;
+            position: relative;
+            overflow: visible; /* Allow content to expand */
         }
 
         .mermaid-diagram {
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start; /* Align to top instead of center */
             min-height: 300px;
             background: #fafafa;
             border-radius: 10px;
             border: 1px solid #e9ecef;
+            position: relative;
+            overflow: visible; /* Allow content to expand */
+            padding-top: 50px; /* Extra space for zoom controls */
+        }
+
+        /* Zoom controls for diagrams */
+        .diagram-zoom-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 5px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+
+        .dark-theme .diagram-zoom-controls {
+            background: rgba(52, 73, 94, 0.95);
+        }
+
+        .zoom-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .zoom-btn:hover {
+            background: #2980b9;
+            transform: scale(1.1);
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        .zoom-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .zoom-level {
+            display: flex;
+            align-items: center;
+            padding: 0 5px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+            min-width: 80px;
+            justify-content: center;
+        }
+        
+        .zoom-input {
+            width: 60px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 14px;
+            text-align: center;
+            background: white;
+            color: #495057;
+            font-weight: 600;
+        }
+        
+        .zoom-input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        
+        .dark-theme .zoom-input {
+            background: #2c3e50;
+            color: #ecf0f1;
+            border-color: #4a5568;
+        }
+        
+        .dark-theme .zoom-input:focus {
+            border-color: #3498db;
+        }
+
+        .dark-theme .zoom-level {
+            color: #ecf0f1;
+        }
+
+        .mermaid-wrapper {
+            display: inline-block;
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+        }
+
+        .mermaid svg, .mermaid-diagram svg {
+            max-width: none !important;
+            height: auto !important;
         }
 
         .placeholder {
@@ -971,6 +1084,7 @@
         let directoryHandle = null;
         let currentFileTree = null;
         let currentFileFilter = 'both';
+        let diagramZoomLevels = new Map(); // Store zoom levels for each diagram
 
         // Directory input handling
         directoryInput.addEventListener('change', (e) => {
@@ -1367,7 +1481,26 @@
                         console.log('Diagram content:', diagramText.substring(0, 100) + (diagramText.length > 100 ? '...' : ''));
                         
                         const { svg } = await mermaid.render(diagramId + '-svg', diagramText);
-                        element.innerHTML = svg;
+                        
+                        // Create wrapper with zoom controls
+                        const zoomLevel = diagramZoomLevels.get(diagramId) || 1;
+                        element.innerHTML = `
+                            <div class="diagram-zoom-controls">
+                                <button class="zoom-btn" onclick="zoomDiagram('${diagramId}', -0.1)" title="Zoom Out">−</button>
+                                <input type="text" 
+                                       class="zoom-input" 
+                                       value="${Math.round(zoomLevel * 100)}%" 
+                                       onchange="setZoomDirectly('${diagramId}', this)"
+                                       onkeypress="if(event.key==='Enter'){setZoomDirectly('${diagramId}', this); this.blur();}"
+                                       title="Enter zoom percentage (25%-400%)"
+                                />
+                                <button class="zoom-btn" onclick="zoomDiagram('${diagramId}', 0.1)" title="Zoom In">+</button>
+                                <button class="zoom-btn" onclick="resetZoom('${diagramId}')" title="Reset Zoom">⟲</button>
+                            </div>
+                            <div class="mermaid-wrapper" id="${diagramId}-wrapper" style="transform: scale(${zoomLevel});">
+                                ${svg}
+                            </div>
+                        `;
                         console.log('Successfully rendered diagram:', diagramId);
                     }
                 } catch (error) {
@@ -1395,9 +1528,27 @@
             }
 
             try {
-                const diagramId = 'mermaid-' + Date.now();
-                mermaid.render(diagramId, content).then(({svg}) => {
-                    diagramContainer.innerHTML = svg;
+                const diagramId = 'mermaid-standalone';
+                const zoomLevel = diagramZoomLevels.get(diagramId) || 1;
+                
+                mermaid.render(diagramId + '-svg', content).then(({svg}) => {
+                    diagramContainer.innerHTML = `
+                        <div class="diagram-zoom-controls">
+                            <button class="zoom-btn" onclick="zoomDiagram('${diagramId}', -0.1)" title="Zoom Out">−</button>
+                            <input type="text" 
+                                   class="zoom-input" 
+                                   value="${Math.round(zoomLevel * 100)}%" 
+                                   onchange="setZoomDirectly('${diagramId}', this)"
+                                   onkeypress="if(event.key==='Enter'){setZoomDirectly('${diagramId}', this); this.blur();}"
+                                   title="Enter zoom percentage (25%-400%)"
+                            />
+                            <button class="zoom-btn" onclick="zoomDiagram('${diagramId}', 0.1)" title="Zoom In">+</button>
+                            <button class="zoom-btn" onclick="resetZoom('${diagramId}')" title="Reset Zoom">⟲</button>
+                        </div>
+                        <div class="mermaid-wrapper" id="${diagramId}-wrapper" style="transform: scale(${zoomLevel});">
+                            ${svg}
+                        </div>
+                    `;
                 }).catch(error => {
                     console.error('Mermaid rendering error:', error);
                     diagramContainer.innerHTML = `<div class="error-message">
@@ -1520,6 +1671,134 @@
             renderDocument();
         }
 
+        // Zoom control functions
+        function zoomDiagram(diagramId, delta) {
+            const currentZoom = diagramZoomLevels.get(diagramId) || 1;
+            const newZoom = Math.max(0.25, Math.min(4, currentZoom + delta)); // Limit zoom between 25% and 400%
+            
+            diagramZoomLevels.set(diagramId, newZoom);
+            
+            // Update the diagram scale
+            const wrapper = document.getElementById(diagramId + '-wrapper');
+            if (wrapper) {
+                // Get the parent container (either .mermaid or .mermaid-diagram)
+                const container = wrapper.closest('.mermaid, .mermaid-diagram');
+                
+                // Store current scroll position relative to the container
+                const scrollContainer = document.getElementById('documentPreview');
+                const containerRect = container.getBoundingClientRect();
+                const scrollTop = scrollContainer.scrollTop;
+                
+                // Apply the new zoom
+                wrapper.style.transform = `scale(${newZoom})`;
+                
+                // If zooming in and the diagram top is above viewport, scroll to make it visible
+                if (newZoom > currentZoom) {
+                    // After zoom, check if top of diagram is out of view
+                    setTimeout(() => {
+                        const newContainerRect = container.getBoundingClientRect();
+                        const previewRect = scrollContainer.getBoundingClientRect();
+                        
+                        // If the top of the diagram is above the preview area
+                        if (newContainerRect.top < previewRect.top) {
+                            // Scroll to bring the top of the diagram into view
+                            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }, 50); // Small delay to allow transform to apply
+                }
+            }
+            
+            // Update the zoom level display
+            const zoomInput = wrapper?.parentElement?.querySelector('.zoom-input');
+            if (zoomInput) {
+                zoomInput.value = `${Math.round(newZoom * 100)}%`;
+            }
+            
+            // Update button states
+            updateZoomButtons(diagramId, newZoom);
+        }
+        
+        function resetZoom(diagramId) {
+            diagramZoomLevels.set(diagramId, 1);
+            
+            const wrapper = document.getElementById(diagramId + '-wrapper');
+            if (wrapper) {
+                wrapper.style.transform = 'scale(1)';
+            }
+            
+            const zoomInput = wrapper?.parentElement?.querySelector('.zoom-input');
+            if (zoomInput) {
+                zoomInput.value = '100%';
+            }
+            
+            updateZoomButtons(diagramId, 1);
+        }
+        
+        function setZoomDirectly(diagramId, inputElement) {
+            // Parse the input value
+            let value = inputElement.value.trim().replace('%', '');
+            value = parseFloat(value);
+            
+            // Validate the input
+            if (isNaN(value) || value < 25 || value > 400) {
+                // Reset to current value if invalid
+                const currentZoom = diagramZoomLevels.get(diagramId) || 1;
+                inputElement.value = `${Math.round(currentZoom * 100)}%`;
+                return;
+            }
+            
+            // Convert percentage to scale factor
+            const newZoom = value / 100;
+            diagramZoomLevels.set(diagramId, newZoom);
+            
+            // Update the diagram scale
+            const wrapper = document.getElementById(diagramId + '-wrapper');
+            if (wrapper) {
+                wrapper.style.transform = `scale(${newZoom})`;
+                
+                // Check if we need to scroll
+                const container = wrapper.closest('.mermaid, .mermaid-diagram');
+                const scrollContainer = document.getElementById('documentPreview');
+                
+                setTimeout(() => {
+                    const containerRect = container.getBoundingClientRect();
+                    const previewRect = scrollContainer.getBoundingClientRect();
+                    
+                    if (containerRect.top < previewRect.top) {
+                        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 50);
+            }
+            
+            // Update button states
+            updateZoomButtons(diagramId, newZoom);
+        }
+        
+        function updateZoomButtons(diagramId, zoomLevel) {
+            const wrapper = document.getElementById(diagramId + '-wrapper');
+            if (!wrapper) return;
+            
+            const controls = wrapper.parentElement.querySelector('.diagram-zoom-controls');
+            if (!controls) return;
+            
+            const buttons = controls.querySelectorAll('.zoom-btn');
+            
+            // Disable zoom out if at minimum
+            if (buttons[0]) {
+                buttons[0].disabled = zoomLevel <= 0.25;
+            }
+            
+            // Disable zoom in if at maximum
+            if (buttons[1]) {
+                buttons[1].disabled = zoomLevel >= 4;
+            }
+        }
+        
+        // Make zoom functions globally accessible
+        window.zoomDiagram = zoomDiagram;
+        window.resetZoom = resetZoom;
+        window.setZoomDirectly = setZoomDirectly;
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
@@ -1544,6 +1823,34 @@
                         e.preventDefault();
                         if (!saveButton.disabled) {
                             saveFile();
+                        }
+                        break;
+                    case '=':
+                    case '+':
+                        // Zoom in for focused diagram
+                        e.preventDefault();
+                        const activeWrapper = document.querySelector('.mermaid-wrapper');
+                        if (activeWrapper) {
+                            const diagramId = activeWrapper.id.replace('-wrapper', '');
+                            zoomDiagram(diagramId, 0.1);
+                        }
+                        break;
+                    case '-':
+                        // Zoom out for focused diagram
+                        e.preventDefault();
+                        const activeWrapperOut = document.querySelector('.mermaid-wrapper');
+                        if (activeWrapperOut) {
+                            const diagramId = activeWrapperOut.id.replace('-wrapper', '');
+                            zoomDiagram(diagramId, -0.1);
+                        }
+                        break;
+                    case '0':
+                        // Reset zoom for focused diagram
+                        e.preventDefault();
+                        const activeWrapperReset = document.querySelector('.mermaid-wrapper');
+                        if (activeWrapperReset) {
+                            const diagramId = activeWrapperReset.id.replace('-wrapper', '');
+                            resetZoom(diagramId);
                         }
                         break;
                 }
